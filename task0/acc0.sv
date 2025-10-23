@@ -3,13 +3,15 @@
 //  Title      :  Initial image inversion task - task 0.
 //             :
 //  Developers :  Georg Brink Dyvad - s224038@student.dtu.dk
-//             :  YOUR NAME HERE - s??????@student.dtu.dk
+//             :  Sadaf Ayub - s224027@student.dtu.dk
+//             :  Sofus Hammelsø - s224039@student.dtu.dk
+//             :  Alexander Wang Aakersø - s223998@student.dtu.dk
 //             :
 //  Purpose    :  This design contains an entity for the accelerator that must be build
 //             :  in task two of the Edge Detection design project. It contains an
 //             :  architecture skeleton for the entity as well.
 //             :
-//  Revision   :  1.0   ??-??-??     Final version
+//  Revision   :  1.0   09-10-25     Final version
 //             :
 //
 // ----------------------------------------------------------------------------//
