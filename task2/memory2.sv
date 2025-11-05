@@ -52,6 +52,9 @@ function automatic ram_type read_pgm_file(string load_file_name, ref int width, 
     $finish;
   end
 
+  // Skip grayscale
+  $fgets(_line, fd);
+
   // Read pixel data and pack into memory words (little-endian)
   for (int i = 0; i < (width * height)/4; i++) begin
     byte pixels [4];
