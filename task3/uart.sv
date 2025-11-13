@@ -58,7 +58,7 @@ module uart #(
   // RX Over-sampling
   logic [3:0] rx_sample_count, rx_sample_count_next;
   logic [15:0] rx_sample_vec;
-  always_ff @(posedge rx_tick or posedge rst) begin
+  always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
       rx_sample_count <= 4'd0;
       rx_sample_vec   <= 16'hffff;
@@ -90,7 +90,7 @@ module uart #(
       RX_IDLE: begin
         if (rx_sample_vec == 16'b0000_0000_0000_0001) begin  // Start bit detected
           rx_state_next        = RX_DATA;
-          rx_bit_index_next    = 4'd0;
+          rx_bit_index_next    = 3'd0;
           rx_sample_count_next = 4'd0;
         end
       end
@@ -98,7 +98,7 @@ module uart #(
       RX_DATA: begin
         if (rx_sample_count == 4'd8) begin  // Sample in the middle of the bit
           rx_shift_reg_next[rx_bit_index] = rx_sync_1;
-          if (rx_bit_index == 4'd7) begin
+          if (rx_bit_index == 3'd7) begin
             rx_state_next = RX_STOP;
           end else begin
             rx_bit_index_next = rx_bit_index + 1;
@@ -122,12 +122,12 @@ module uart #(
     endcase
   end
 
-  always_ff @(posedge rx_tick or posedge rst) begin
+  always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
       rx_state     <= RX_IDLE;
-      rx_bit_index <= 4'b0;
+      rx_bit_index <= 3'b0;
       rx_shift_reg <= 8'b0;
-    end else begin
+    end else if (rx_tick) begin
       rx_state     <= rx_state_next;
       rx_bit_index <= rx_bit_index_next;
       rx_shift_reg <= rx_shift_reg_next;
@@ -164,7 +164,7 @@ module uart #(
 
   always_comb begin : tx_fsm_comb
     tx_state_next      = tx_state;
-    tx_bit_index_next  = 4'd0;
+    tx_bit_index_next  = 3'd0;
     tx_next            = 1'b1;  // Line idle high
     data_stream_in_ack = 1'b0;
 
@@ -182,7 +182,7 @@ module uart #(
 
       TX_DATA: begin
         tx_next = data_stream_in[tx_bit_index];
-        if (tx_bit_index == 4'd7) begin
+        if (tx_bit_index == 3'd7) begin
           tx_state_next = TX_STOP;
         end else begin
           tx_bit_index_next = tx_bit_index + 1;
@@ -199,12 +199,12 @@ module uart #(
     endcase
   end
 
-  always_ff @(posedge tx_tick or posedge rst) begin
+  always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
       tx_state     <= TX_IDLE;
       tx           <= 1'b1;
-      tx_bit_index <= 4'd0;
-    end else begin
+      tx_bit_index <= 3'd0;
+    end else if (tx_tick) begin
       tx_state     <= tx_state_next;
       tx           <= tx_next;
       tx_bit_index <= tx_bit_index_next;
