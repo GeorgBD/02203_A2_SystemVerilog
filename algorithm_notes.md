@@ -11,7 +11,7 @@ Present data structures and then algorithm.
 3. BUFFER_IN  - 6 pixels - Holds reads from MEM (THIRD ROW). 
 4. SHREG A    - 6 pixels - Holds values Popped from FIFO A. 
 5. SHREG B    - 6 pixels - Holds values Popped from FIFO B.
-6. BUFFER_RES - 4 pixels - Holds results calculated. When 4 results write and wipe. 
+6. BUFFER_RES - 7 pixels - Holds results calculated. When 7 results write bottom 4 and shift 4 down. 
 
 ##### Algorithm step by step:
 
@@ -34,13 +34,13 @@ Be aware that the algorithm is a little different for the very first pixel (in e
 Now that we have initial data we can begin to calculate.
 
 // THIS IS A SPECIAL PIXEL CASE
-4. Calculate Pixel B2 and B3:
+4. Calculate Pixel B1, B2 and B3:
     A) From FIFO A POP A1 A2 A3 A4. Shift into SHREG A.
     B) From FIFO B POP B1 B2 B3 B4. Shift into SHREG B.
     C) From BUFFER_IN get C1 C2 C3 C4. 
 
 4. Save result in BUFFER_RES. 
-    A) When number of stored results = 4 do WRITE and clear. Maybe use counter to keep track?
+    A) When number of stored results = 7 do WRITE of the bottom 4 and then shift 4 down.
 
 5. Set up for next pixel: 
     A) Push C1 C2 C3 C4 into FIFO A.         (transform into row "C" slowly)
