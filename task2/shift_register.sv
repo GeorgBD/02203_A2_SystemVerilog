@@ -1,21 +1,21 @@
 module shift_register #(
     parameter TOTAL_BYTES = 16,
-    parameter SHIFT_BYTES = 4
+    parameter SHIFT_BYTES = 4,
+    parameter READ_BYTES = 6
 ) (
     input  logic clk,
     input  logic reset,          // Active-HIGH reset
-    input  logic shift_en,       // Shift enable
-    input  logic [SHIFT_BYTES*8-1:0] data_in,   // 4 bytes in (32 bits)
-    output logic [SHIFT_BYTES*8-1:0] data_out   // 4 bytes out (32 bits)
+    input  logic shift_en,       // Shift and write enable
+    input  logic [SHIFT_BYTES*8-1:0] data_in,  // SHIFT_BYTES in
+    output logic [READ_BYTES*8-1:0] data_out   // READ_BYTES out 
 );
     
     // Internal shift register - 7 bytes = 56 bits
     logic [TOTAL_BYTES*8-1:0] shift_reg;
     
     // Output is the top 4 bytes - asynchronous read
-    assign data_out = shift_reg[TOTAL_BYTES*8-1 : (TOTAL_BYTES-SHIFT_BYTES)*8];
+    assign data_out = shift_reg[TOTAL_BYTES*8-1 : (TOTAL_BYTES-READ_BYTES)*8];
     
-
     // Input is bottom 4 bytes - synchronous write / shift. 
     always_ff @(posedge clk or posedge reset) begin
         if (reset) begin

@@ -7,8 +7,8 @@
 
 module fifo #(
 	parameter PW = 8,                  // Pixel width (in bits)
-	parameter PPT = 4,                 // Pixels Per Transfer
-	parameter FIFO_DEPTH = 177         // (2*352 + 4)/4
+	parameter PPT = 4,                 // Pixels per transfer
+	parameter FIFO_DEPTH = 352         // 352 bytes pr line
 )(
 	input  logic                clk,
 	input  logic                reset,
@@ -22,7 +22,7 @@ module fifo #(
 	output logic                rd_valid
 );
 
-    import task2_pkg::*;
+  import task2_pkg::*;
 
 	logic [DATA_WIDTH-1:0] mem [0:FIFO_DEPTH-1];
 	logic [ADDR_WIDTH_FIFO-1:0] wr_ptr, rd_ptr;

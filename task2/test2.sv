@@ -9,7 +9,7 @@ module testbench;
     logic clk;
     logic reset;
     logic StopSimulation = 0;
-    localparam string load_file_name = "/home/ottow/Documents/02203_A2_code/task2/pic1.pgm"; // Path to the input PGM file
+    localparam string load_file_name = "systemverilog.pgm"; // Path to the input PGM file
 
     // Accelerator and memory signals
     logic [15:0] addr;
@@ -27,7 +27,7 @@ module testbench;
     );
 
     // Instantiate accelerator
-    acc Accelerator (
+    acc2 Accelerator (
         .clk(clk),
         .reset(reset),
         .addr(addr),
