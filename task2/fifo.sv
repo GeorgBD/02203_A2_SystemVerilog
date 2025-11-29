@@ -8,7 +8,7 @@
 module fifo #(
 	parameter PW = 8,                  // Pixel width (in bits)
 	parameter PPT = 4,                 // Pixels per transfer
-	parameter FIFO_DEPTH = 352         // 352 bytes pr line
+	parameter FIFO_DEPTH = 90         // 88 words pr line
 )(
 	input  logic                clk,
 	input  logic                reset,

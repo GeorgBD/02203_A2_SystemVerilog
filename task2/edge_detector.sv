@@ -7,8 +7,8 @@ import task2_pkg::*;
 
 module edge_detector #(
 
-  parameter M_X_IT = WORDS_PR_LINE,   // Maximum number of X iterations per row (words pr. line)
-  parameter M_Y_IT = NUM_ROWS         // Maximum number of Y iterations (number of rows)
+  parameter M_X_IT = WORDS_PR_LINE-1,   // Maximum number of X iterations per row (words pr. line)
+  parameter M_Y_IT = NUM_ROWS-1         // Maximum number of Y iterations (number of rows)
 
 )(
   // PIXEL INPUTS
@@ -25,35 +25,43 @@ module edge_detector #(
 
 );
 
-  function logic [PW-1 : 0] sobel_convolution(
+  function pixel sobel_convolution(
 
     input pixel [3:1] R1,
     input pixel [3:1] R2,
     input pixel [3:1] R3
 
   );
+    logic signed [9:0] Dx;
+    logic signed [9:0] Dy;
+    logic [10:0] D_abs;
 
-    logic signed [11:0] Dx; // 12 bits needed for calc
-    logic signed [11:0] Dy; // 12 bits needed for calc
-    logic [11:0] abs_Dx;    // Absolute value unsigned
-    logic [11:0] abs_Dy;    // Absolute value unsigned
-    logic [12:0] Dn;        // Sum of two 12-bit values needs 13 bits
+    // Compute Dx(n) - equation (4)
 
-    Dx = R1[1] - R1[3] + ( (R2[1] - R2[3]) << 1 ) + R3[1] - R3[3]; // 1->3, 3->1
-    Dy = R1[3] - R3[3] + ( (R1[2] - R3[2]) << 1 ) + R1[1] - R3[1]; // 1->3, 3->1
+    assign Dx = $signed({2'b0, R1[3]}) - $signed({2'b0, R1[1]}) + 
+                (($signed({2'b0, R2[3]}) - $signed({2'b0, R2[1]})) <<< 1 ) + 
+                $signed({2'b0, R3[3]}) - $signed({2'b0, R3[1]});
 
-    // Calculate absolute values
-    abs_Dx = (Dx < 0) ? -Dx : Dx;
-    abs_Dy = (Dy < 0) ? -Dy : Dy;
+    // Compute Dy(n) - equation (5)
+    
+    assign Dy = $signed({2'b0, R1[1]}) - $signed({2'b0, R3[1]}) + 
+                (($signed({2'b0, R1[2]}) - $signed({2'b0, R3[2]})) <<< 1 )  + 
+                $signed({2'b0, R1[3]}) - $signed({2'b0, R3[3]});
 
-    Dn = abs_Dx + abs_Dy;
+    // Compute |D(n)| - equation (6)
+    assign D_abs = (Dx[9] ? -Dx : Dx) + (Dy[9] ? -Dy : Dy);
 
-    // Saturate or truncate - NOTE: probably not correct to always just truncate
-    if (Dn > (2**PW - 1)) 
+    //Saturate or truncate - NOTE: probably not correct to always just truncate
+    if (D_abs > (2**PW - 1)) 
       return {PW{1'b1}};  // Saturate to max value
     else
-      return Dn[PW-1:0];  // Return lower bits
+      return D_abs[PW-1:0];  // Return lower bits
 
+    // ANSWER: DO NEITHER - INSTEAD JUST SHIFT THE RESULT DOWN (ALWAYS) - ELSE TOO WHITE
+    // return (D_abs[10:3] + D_abs[10:5]);
+
+    // Comment everything else and uncomment this to do pass-through test
+    //return R2[2];  // Center of 3x3 window
   endfunction
 
   // Special cases:
@@ -63,14 +71,14 @@ module edge_detector #(
   // Signals for determining if in special case
   logic TOP_special, BOT_special, LEFT_special, RIGHT_special; // for handling the edges
 
-  assign LEFT_special   = X_IT == 'd1      ?    1 : 0;
-  assign RIGHT_special  = X_IT == M_X_IT   ?    1 : 0;
+  assign LEFT_special   = X_IT == 'd0      ?    1 : 0;       
+  assign RIGHT_special  = X_IT == M_X_IT   ?    1 : 0;        
   assign BOT_special    = Y_IT == M_Y_IT   ?    1 : 0;
   assign TOP_special    = Y_IT == 'd0      ?    1 : 0;
 
   pixel [3:0] pixels_calc;    // Can at most calculate 4 pixels in parallel
 
-  // Calculate the leftmost pixel
+  // Calculate the rightmost pixel
   // SPECIAL CASES: when at top / bottom row AND when calculating leftmost pixel
   always_comb begin
 
@@ -78,22 +86,13 @@ module edge_detector #(
 
     R1 = R1_pixels[5:3];
     R2 = R2_pixels[5:3];
-    R3 = R2_pixels[5:3];
-
-    if(LEFT_special == 'd1) begin // needs to be reworked with edge cases
-
-      R1 = '0;
-      R2 = '0;
-      R3 = '0;
-
-    end 
+    R3 = R3_pixels[5:3];
 
     pixels_calc[3] = sobel_convolution(R1, R2, R3);
 
   end
 
-
-  // Calculate the second most left pixel 
+  // Calculate the second most right pixel 
   // SPECIAL CASES: when at top / bottom row
   always_comb begin
 
@@ -101,7 +100,7 @@ module edge_detector #(
 
     R1 = R1_pixels[4:2];
     R2 = R2_pixels[4:2];
-    R3 = R2_pixels[4:2];
+    R3 = R3_pixels[4:2];
 
     if(LEFT_special) begin // needs to be reworked with edge cases
 
@@ -112,7 +111,7 @@ module edge_detector #(
   end
 
 
-  // Calculate the second most right pixel
+  // Calculate the second most left pixel
   // SPECIAL CASES: when at top / bottom row
   always_comb begin
 
@@ -120,7 +119,7 @@ module edge_detector #(
 
     R1 = R1_pixels[3:1];
     R2 = R2_pixels[3:1];
-    R3 = R2_pixels[3:1];
+    R3 = R3_pixels[3:1];
 
     if(LEFT_special) begin // needs to be reworked with edge cases
 
@@ -131,7 +130,7 @@ module edge_detector #(
   end
 
 
-  // Calculate the rightmost pixel
+  // Calculate the leftmost pixel
   // SPECIAL CASES: when at top / bottom row AND when calculating rightmost pixel
   always_comb begin
 
@@ -139,15 +138,7 @@ module edge_detector #(
 
     R1 = R1_pixels[2:0];
     R2 = R2_pixels[2:0];
-    R3 = R2_pixels[2:0];
-
-    if(LEFT_special) begin // needs to be reworked with edge cases
-
-      R1 = '0;
-      R2 = '0;
-      R3 = '0;
-
-    end 
+    R3 = R3_pixels[2:0];
 
     pixels_calc[0] = sobel_convolution(R1, R2, R3);
 
@@ -164,10 +155,10 @@ module edge_detector #(
 
     if(LEFT_special) begin // needs to be reworked with edge cases
 
-      pixels_out[3] = pixels_calc[0];
-      pixels_out[2] = pixels_calc[3];
-      pixels_out[1] = pixels_calc[2];
-      pixels_out[0] = pixels_calc[1];
+      pixels_out[0] = pixels_calc[3];
+      pixels_out[3] = pixels_calc[2];
+      pixels_out[2] = pixels_calc[1];
+      pixels_out[1] = pixels_calc[0];
 
     end 
 

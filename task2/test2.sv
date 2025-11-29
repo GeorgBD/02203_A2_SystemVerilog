@@ -9,7 +9,7 @@ module testbench;
     logic clk;
     logic reset;
     logic StopSimulation = 0;
-    localparam string load_file_name = "systemverilog.pgm"; // Path to the input PGM file
+    localparam string load_file_name = "pattern.pgm"; // Path to the input PGM file
 
     // Accelerator and memory signals
     logic [15:0] addr;

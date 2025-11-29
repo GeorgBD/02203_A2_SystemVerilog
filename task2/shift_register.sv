@@ -14,7 +14,7 @@ module shift_register #(
     logic [TOTAL_BYTES*8-1:0] shift_reg;
     
     // Output is the top 4 bytes - asynchronous read
-    assign data_out = shift_reg[TOTAL_BYTES*8-1 : (TOTAL_BYTES-READ_BYTES)*8];
+    assign data_out = shift_reg[READ_BYTES*8-1 : 0];
     
     // Input is bottom 4 bytes - synchronous write / shift. 
     always_ff @(posedge clk or posedge reset) begin
@@ -22,7 +22,7 @@ module shift_register #(
             shift_reg <= '0;  // Clear register
         end else if (shift_en) begin
             // New data comes in at bottom, old data shifts towards top
-            shift_reg <= {shift_reg[(TOTAL_BYTES-SHIFT_BYTES)*8-1 : 0], data_in};
+            shift_reg <= {data_in, shift_reg[TOTAL_BYTES*8-1 : SHIFT_BYTES*8]};
         end
     end
     

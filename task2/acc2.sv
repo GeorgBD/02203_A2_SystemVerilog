@@ -43,8 +43,8 @@ module acc2 (
   //------------------------------------------------------------------------------
 
   // Signals for counters
-  logic [$clog2(NUM_ROWS)                 - 1 : 0] row_idx, next_row_idx;
-  logic [$clog2(WORDS_PR_LINE)            - 1 : 0] clmn_idx, next_clmn_idx;
+  logic [$clog2(NUM_ROWS)                 - 1 : 0] read_row_idx, next_read_row_idx, compute_row_idx, next_compute_row_idx;
+  logic [$clog2(WORDS_PR_LINE)            - 1 : 0] read_clmn_idx, next_read_clmn_idx, compute_clmn_idx, next_compute_clmn_idx;
 
   // Module Instantiations (FIFO A, FIFO B) - and signals
     
@@ -89,7 +89,7 @@ module acc2 (
 
   logic [DATA_WIDTH - 1 : 0 ] shregA_in, shregB_in, bRES_in, bIN_in;
   logic [DATA_WIDTH - 1 : 0 ] bRES_out;
-  logic [6*8 - 1        : 0 ] shregA_out, shregB_out, bIN_out;
+  logic [6*PW - 1       : 0 ] shregA_out, shregB_out, bIN_out;
   logic                       shregA_en, shregB_en, bRES_en, bIN_en;
 
   shift_register #(
@@ -145,7 +145,7 @@ module acc2 (
   pixel [5:0] ed_R1_IN;
   pixel [5:0] ed_R2_IN;
   pixel [5:0] ed_R3_IN;
-  pixel [5:0] ed_P_OUT;
+  pixel [3:0] ed_P_OUT;
 
   edge_detector #(
     .M_X_IT(WORDS_PR_LINE-1),
@@ -160,8 +160,8 @@ module acc2 (
     .pixels_out(ed_P_OUT),
 
     // control inputs
-    .X_IT(clmn_idx),        // From statemachine : Current column index
-    .Y_IT(row_idx)          // From statemaching : Current row index
+    .X_IT(compute_clmn_idx),        // From statemachine : Current column index
+    .Y_IT(compute_row_idx)          // From statemaching : Current row index
   );
 
   //------------------------------------------------------------------------------
@@ -169,7 +169,7 @@ module acc2 (
   //------------------------------------------------------------------------------
   
   typedef enum logic [2:0] {
-        idle = 0, store_2_lines = 1, setup_compute = 2, compute_pixels = 3, write_one_word = 4, done = 5
+        idle = 0, store_2_lines = 1, setup_compute = 2, compute_pixels = 3, write_one_word = 4, write_last_word_in_row = 5, done = 6
     } state_t;
 
   state_t state, next_state;
@@ -187,7 +187,7 @@ module acc2 (
     wr_req      = 1'b0;
     finish      = 1'b0;
     addr        = rd_addr; //word addressing. addr = 0 gives first word, =1 gives second. etc.
-    dataW       = 0;
+    dataW       = '0;
 
     //FIFO Defaults:
     rd_en_FA = 1'b0;
@@ -215,8 +215,10 @@ module acc2 (
     // Default for next values
     next_rd_addr = rd_addr;
     next_wr_addr = wr_addr;
-    next_row_idx  = row_idx;
-    next_clmn_idx = clmn_idx;
+    next_read_row_idx  = read_row_idx;
+    next_read_clmn_idx = read_clmn_idx;
+    next_compute_row_idx = compute_row_idx;
+    next_compute_clmn_idx = compute_clmn_idx;
     
     case(state)
       
@@ -239,15 +241,15 @@ module acc2 (
           next_rd_addr++;
 
           //Read from memory into FIFOs
-          if (row_idx == 'd0) begin                          //If reading data belongs to first line
-            wr_en_FA = 1'b1;                                    //Store data in FIFO A
-            next_state = store_2_lines;                         //Keep reading
-          end else if (row_idx == 'd1) begin                 //If read data belongs to second line
-            wr_en_FB = 1'b1;                                    //Store data in FIFO B
-            next_state = store_2_lines;                         //Keep reading
+          if (read_row_idx == 'd0) begin                      //If reading data belongs to first line
+            wr_en_FA    = 1'b1;                                    //Store data in FIFO A
+            next_state  = store_2_lines;                         //Keep reading
+          end else if (read_row_idx == 'd1) begin             //If read data belongs to second line
+            wr_en_FB    = 1'b1;                                    //Store data in FIFO B
+            next_state  = store_2_lines;                         //Keep reading
           end else begin                                      //If read data belongs to third line (only one word)
-            bIN_en = 1'b1;                                      //Store data in input buffer
-            next_state = setup_compute;                        //Go to compute pixels
+            bIN_en      = 1'b1;                                      //Store data in input buffer
+            next_state  = setup_compute;                        //Go to compute pixels
 
             //Stage FIFO read. FIFO -> SHREG. Then the data is ready next cycle in compute state.
             rd_en_FA  = 1'b1;
@@ -258,6 +260,14 @@ module acc2 (
             req           = 1'b0;
 
           end
+
+          if(read_clmn_idx == (WORDS_PR_LINE)) begin 
+            next_read_clmn_idx = '0;
+            next_read_row_idx  = read_row_idx + 'd1;
+          end else begin
+            next_read_clmn_idx = read_clmn_idx + 'd1;
+          end
+
         end
       
       setup_compute:
@@ -290,50 +300,39 @@ module acc2 (
           // ================================================================================================================
           // (1) - Give inputs to edge detector module
           for (int i = 0; i < 6; i++) begin
-            ed_R1_IN[i] = shregA_out[i*8 +: 8];
+            ed_R1_IN[i] = shregA_out[i*8 +: 8];  //[a +: b] means you want b bits out starting at index a
             ed_R2_IN[i] = shregB_out[i*8 +: 8];
             ed_R3_IN[i] = bIN_out[i*8 +: 8];
-          end          
-          // ================================================================================================================
+          end       
 
           // ================================================================================================================
           // (2) - Stage computed pixel result to go inside bRes
           bRES_en = 'd1; // enable bRes to get pixels from edge detector module
           for (int i = 0; i < 4; i++) bRES_in[i*8 +: 8] = ed_P_OUT[i]; // Result buffer gets pixels from edge detector module
-          // ================================================================================================================
-          
+          //for (int i = 0; i < 4; i++) bRES_in[i*8 +: 8] = ed_P_OUT[3-i];  // Result buffer gets pixels from edge detector module
+
           // ================================================================================================================
           // (3) - Request to read one word of data
           req = 1'b1;      // request
           next_rd_addr++;     // increment read address
           addr = rd_addr;
-          // ================================================================================================================
 
           // ================================================================================================================
           // (4) - Rotate fifo data 
           wr_en_FA = 1'b1;
-          write_FA = shregB_out[DATA_WIDTH - 1:0];
+          write_FA = shregB_out[DATA_WIDTH - 1 : 0];
           wr_en_FB = 1'b1;
-          write_FB = bIN_out[DATA_WIDTH - 1:0];
-          // ================================================================================================================
-          
+          write_FB = bIN_out[DATA_WIDTH - 1 : 0];
+
           // ================================================================================================================
           // (5) - Stage FIFO read
           rd_en_FA  = 1'b1;
           rd_en_FB  = 1'b1;
 
           // ================================================================================================================
-          
+          next_state = write_one_word;
 
-          // ================================================================================================================
-          // (6) - Decide next state. Go to write_one_word unless we have read all rows of image (row_idx == NUM_ROWs)
-          if (row_idx >= NUM_ROWS) begin
-            next_state = done;
-          end else begin
-            next_state = write_one_word;
-          end
-          // ================================================================================================================
-        end
+        end 
       
       write_one_word:  
         begin
@@ -349,31 +348,56 @@ module acc2 (
           shregA_en = 1'b1;
           shregB_en = 1'b1;
 
-          
-          // add logic to qualify if we want to do the write - probably use row/column indexing to locate special cases
-          //if(SHREG FULL (6px)): enable compute of 4 pixels from the 6 pixels in shreg and shift shreg 4px down.
-          //else if(SHREG 4px): compute 2 pixels and shift the 4px in each down the shregs
-          //else: no compute (waiting one cycle for 4px to come in)
           addr = wr_addr;
-          next_wr_addr++;
-          if (clmn_idx >= 3) begin 
-            //If(not first compute of row we can compute pixels)
-              //Write result pixels to mem
+
+          // logic to qualify if we want to do the write
+          if (compute_clmn_idx > 'd0) begin 
             dataW = bRES_out;
-            req = 1'b1; 
-            wr_req = 1'b1;
+            req     = 1'b1; 
+            wr_req  = 1'b1;
+            next_wr_addr = wr_addr + 'd1;
+          end 
+
+          next_state = compute_pixels;
+
+          // ================================================================================================================
+          // Counter to keep track of X, Y indexes for handling special cases and controlling next_state
+          if (compute_clmn_idx == (WORDS_PR_LINE-1)) begin 
+            
+            next_compute_clmn_idx = '0;
+            next_state = write_last_word_in_row;
+            bRES_en = 'd1;
+
+          end else begin
+            next_compute_clmn_idx = compute_clmn_idx + 'd1;
           end
 
-          // always go back to compute_pixels
-          next_state = compute_pixels; 
-
         end
+
+      write_last_word_in_row:
+        begin
+          req     = 1'b1; 
+          wr_req  = 1'b1;
+          addr = wr_addr;
+          next_wr_addr = wr_addr + 'd1;
+          dataW = bRES_out;
+          next_state = compute_pixels;
+
+          if(compute_row_idx == (NUM_ROWS-1)) begin
+            next_state = done;
+          end else begin
+            next_compute_row_idx  = compute_row_idx + 'd1;
+          end
+
+        end  
       
       done:
         begin
-          finish        = 1'b1;
-          next_row_idx  = 'd0;
-          next_clmn_idx = 'd0;
+          finish                = 1'b1;
+          next_read_row_idx     = 'd0;
+          next_read_clmn_idx    = 'd0;
+          next_compute_row_idx  = 'd0;
+          next_compute_clmn_idx = 'd0;
 
           next_state = idle;
         end
@@ -383,22 +407,6 @@ module acc2 (
         end
     endcase
 
-
-    if((req == 1'b1) && (wr_req == 1'b0)) begin
-
-      $display("INCREMENTING NEXT_CLMN_IDX");
-
-      if(clmn_idx == (WORDS_PR_LINE)) begin   // when receiving read data for word 0 clmn_idx == 1
-        next_clmn_idx = '0;
-        next_row_idx  = row_idx + 'd1;
-      end else begin
-        next_clmn_idx = clmn_idx + 'd1;
-
-        $display("INCREMENTING NEXT_CLMN_IDX");
-
-      end
-    end
-
   end
 
   always_ff @(posedge clk or posedge reset) begin
@@ -406,15 +414,23 @@ module acc2 (
       state     <= idle;
       wr_addr   <= NEW_IMG_START_ADDR;
       rd_addr   <= '0;
-      row_idx   <= '0;
-      clmn_idx  <= '0;
+      
+      read_row_idx   <= '0;
+      read_clmn_idx  <= '0;
+      
+      compute_row_idx <= '0;
+      compute_clmn_idx <= '0;
+
     end else begin
       state     <= next_state;
       wr_addr   <= next_wr_addr;
       rd_addr   <= next_rd_addr;
 
-      row_idx   <= next_row_idx;
-      clmn_idx  <= next_clmn_idx;
+      read_row_idx   <= next_read_row_idx;
+      read_clmn_idx  <= next_read_clmn_idx;
+
+      compute_row_idx   <= next_compute_row_idx;
+      compute_clmn_idx  <= next_compute_clmn_idx;
     end
   end
 
