@@ -16,7 +16,7 @@ module edge_detector #(
   input pixel  [5:0] R2_pixels,      // Will at most need 6 pixels for calc for each row
   input pixel  [5:0] R3_pixels,      // Will at most need 6 pixels for calc for each row
 
-  // PIXEL OUTPUT
+  // PIXEL OUTPUT 
   output pixel [3:0] pixels_out,    // Can at most calculate 4 pixels in parallel
 
   // CONTROL INPUTS - these are for calculating when special case is needed (e.g. when at edge)
@@ -52,13 +52,13 @@ module edge_detector #(
     assign D_abs = (Dx[9] ? -Dx : Dx) + (Dy[9] ? -Dy : Dy);
 
     //Saturate or truncate - NOTE: probably not correct to always just truncate
-    if (D_abs > (2**PW - 1)) 
-      return {PW{1'b1}};  // Saturate to max value
-    else
-      return D_abs[PW-1:0];  // Return lower bits
+    //if (D_abs > (2**PW - 1)) 
+    //  return {PW{1'b1}};  // Saturate to max value
+    //else
+    //  return D_abs[PW-1:0];  // Return lower bits
 
     // ANSWER: DO NEITHER - INSTEAD JUST SHIFT THE RESULT DOWN (ALWAYS) - ELSE TOO WHITE
-    // return (D_abs[10:3] + D_abs[10:5]);
+    return (D_abs[10:3] + D_abs[10:5]);
 
     // Comment everything else and uncomment this to do pass-through test
     //return R2[2];  // Center of 3x3 window

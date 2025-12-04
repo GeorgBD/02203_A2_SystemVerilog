@@ -229,6 +229,8 @@ module acc2 (
           if (start) begin
             next_state = store_2_lines;
             req = 1'b1;
+            next_rd_addr++;
+            next_read_clmn_idx++;
           end
         end
       
@@ -255,13 +257,13 @@ module acc2 (
             rd_en_FA  = 1'b1;
             rd_en_FB  = 1'b1;
 
-            // do not request new data or increment address
-            next_rd_addr  = rd_addr;
-            req           = 1'b0;
+            // Request bIN data for first compute (from mem)
+            req = 1'b1;
+            next_rd_addr++;
 
           end
 
-          if(read_clmn_idx == (WORDS_PR_LINE)) begin 
+          if(read_clmn_idx == (WORDS_PR_LINE-1)) begin 
             next_read_clmn_idx = '0;
             next_read_row_idx  = read_row_idx + 'd1;
           end else begin
@@ -275,10 +277,9 @@ module acc2 (
           //Receive FIFO data into shregs
           shregA_en = 1'b1;
           shregB_en = 1'b1;
-
-          //Stage mem read for FIFOs next state
-          req = 1'b1;
-          next_rd_addr++;
+  
+          // Receive input mem data into buffer input
+          bIN_en = 1'b1;
 
           next_state = compute_pixels;
 
@@ -363,7 +364,6 @@ module acc2 (
           // ================================================================================================================
           // Counter to keep track of X, Y indexes for handling special cases and controlling next_state
           if (compute_clmn_idx == (WORDS_PR_LINE-1)) begin 
-            
             next_compute_clmn_idx = '0;
             next_state = write_last_word_in_row;
             bRES_en = 'd1;
@@ -396,10 +396,10 @@ module acc2 (
           finish                = 1'b1;
           next_read_row_idx     = 'd0;
           next_read_clmn_idx    = 'd0;
-          next_compute_row_idx  = 'd0;
+          next_compute_row_idx  = 'd1;    // TODO: CHANGE TO 0 WITH EDGE CASE
           next_compute_clmn_idx = 'd0;
 
-          next_state = idle;
+          next_state = done;
         end
       default: 
         begin
@@ -418,7 +418,7 @@ module acc2 (
       read_row_idx   <= '0;
       read_clmn_idx  <= '0;
       
-      compute_row_idx <= '0;
+      compute_row_idx <= 'd1;
       compute_clmn_idx <= '0;
 
     end else begin
