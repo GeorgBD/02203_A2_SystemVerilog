@@ -57,7 +57,7 @@ module top (
     );
 
     // Accelerator instance
-    acc accelerator_inst_0 (
+    acc2 accelerator_inst_0 (
         .clk(clk),
         .reset(rst),
         .addr(addr),

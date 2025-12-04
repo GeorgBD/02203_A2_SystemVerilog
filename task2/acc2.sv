@@ -141,7 +141,6 @@ module acc2 (
   );
 
   // Pixel detector logic module instantiation
-
   pixel [5:0] ed_R1_IN;
   pixel [5:0] ed_R2_IN;
   pixel [5:0] ed_R3_IN;
@@ -169,7 +168,7 @@ module acc2 (
   //------------------------------------------------------------------------------
   
   typedef enum logic [2:0] {
-        idle = 0, store_2_lines = 1, setup_compute = 2, compute_pixels = 3, write_one_word = 4, write_last_word_in_row = 5, done = 6
+      idle = 0, store_2_lines = 1, setup_cycle = 2, compute_cycle = 3, write_cycle = 4, done = 5
     } state_t;
 
   state_t state, next_state;
@@ -202,10 +201,17 @@ module acc2 (
     shregB_en = 1'b0;
     bRES_en   = 1'b0;
     bIN_en    = 1'b0;
-    shregA_in = read_FA;      //shregA gets output of FIFO A
-    shregB_in = read_FB;      //shregB gets output of FIFO B
+
+    // Shreg expects data as : {P6 , P5 , P4 , P3 , P2 , P1} (rightmost pixel = MSB)
+    // FIFOS gives data as : 
+    for(int i = 0; i < 4; i++) begin
+      shregA_in[i*8 +: 8] = read_FA[24-i*8 +: 8];
+      shregB_in[i*8 +: 8] = read_FB[24-i*8 +: 8];
+      bIN_in[i*8 +: 8] = dataR[24-i*8 +: 8];
+    end
+    // TODO: Change this to new structure
+
     bRES_in   = '0;
-    bIN_in    = dataR;        //input buffer gets data from mem read
 
     // edge detector defaults
     ed_R1_IN = '0;
@@ -229,115 +235,81 @@ module acc2 (
           if (start) begin
             next_state = store_2_lines;
             req = 1'b1;
-            next_rd_addr++;
-            next_read_clmn_idx++;
+            next_rd_addr = 'd1;
           end
         end
       
       store_2_lines: 
         begin
           // ----------------------------------------------------------------------------------------------------------------
-          // This state we read an entire 2 lines from mem and also 1 word of 3rd line.
+          // This state we read an entire line from mem and also 1 word of 2nd line.
           // ----------------------------------------------------------------------------------------------------------------
-          req = 1'b1;
-          next_rd_addr++;
 
           //Read from memory into FIFOs
-          if (read_row_idx == 'd0) begin                      //If reading data belongs to first line
-            wr_en_FA    = 1'b1;                                    //Store data in FIFO A
-            next_state  = store_2_lines;                         //Keep reading
-          end else if (read_row_idx == 'd1) begin             //If read data belongs to second line
-            wr_en_FB    = 1'b1;                                    //Store data in FIFO B
-            next_state  = store_2_lines;                         //Keep reading
-          end else begin                                      //If read data belongs to third line (only one word)
-            bIN_en      = 1'b1;                                      //Store data in input buffer
-            next_state  = setup_compute;                        //Go to compute pixels
-
-            //Stage FIFO read. FIFO -> SHREG. Then the data is ready next cycle in compute state.
-            rd_en_FA  = 1'b1;
-            rd_en_FB  = 1'b1;
-
-            // Request bIN data for first compute (from mem)
+          if (rd_addr < WORDS_PR_LINE) begin  //If reading data belongs to first line
+            wr_en_FB    = 1'b1;               //Store data in FIFO A
+            wr_en_FA    = 1'b1;
+            write_FA    = 'd0;                //FIFO A gets zeros
             req = 1'b1;
-            next_rd_addr++;
-
-          end
-
-          if(read_clmn_idx == (WORDS_PR_LINE-1)) begin 
-            next_read_clmn_idx = '0;
-            next_read_row_idx  = read_row_idx + 'd1;
-          end else begin
-            next_read_clmn_idx = read_clmn_idx + 'd1;
+            
+            next_rd_addr = rd_addr + 1;
+            next_state  = store_2_lines;  
+          end else begin                                     
+            
+            next_state  = setup_cycle; 
+            
+            rd_en_FA  = 1'b1; //Stage FIFO read for shreg
+            rd_en_FB  = 1'b1; // -||-
+            
+            req = 1'b1; //Stage read from MEM into bIn
           end
 
         end
       
-      setup_compute:
+      setup_cycle:
         begin
           //Receive FIFO data into shregs
-          shregA_en = 1'b1;
-          shregB_en = 1'b1;
-  
-          // Receive input mem data into buffer input
-          bIN_en = 1'b1;
-
-          next_state = compute_pixels;
+          shregA_en = 1'b1;   // Get data from FIFOA
+          shregB_en = 1'b1;   // Get data from FIFOB 
+          bIN_en    = 1'b1;   // Put input data into bIn
+          
+          
+          next_state = compute_cycle;
 
         end
 
-      compute_pixels: 
+      compute_cycle: 
         begin
          
-          // ----------------------------------------------------------------------------------------------------------------
-          // This state we: 
-          // 1. Use data present on outputs of shregs and bIn to compute pixels
-          // 2. Stages the computed pixels to go inside the result buffer
-          // 3. Request to read one word of data (should go into bIn next clock cycle)
-          // 4. Rotates data; biN -> FIFO_B, shregB -> FIFO_A, shreg_A -> void
-          // 5. Stage FIFO reads for next states SHREG read.
-          // 6. Go back and forth to write_one_word state where we write data from result buffer to mem
-          // ----------------------------------------------------------------------------------------------------------------
+          rd_en_FA  = 1'b1; // Stage fifo reads for shregs
+          rd_en_FB  = 1'b1; // Stage fifo reads for shregs
 
-          // ================================================================================================================
-          // (1) - Give inputs to edge detector module
-          for (int i = 0; i < 6; i++) begin
-            ed_R1_IN[i] = shregA_out[i*8 +: 8];  //[a +: b] means you want b bits out starting at index a
-            ed_R2_IN[i] = shregB_out[i*8 +: 8];
-            ed_R3_IN[i] = bIN_out[i*8 +: 8];
-          end       
+          wr_en_FA = 1'b1; //Stage fifoA write from shregB  (ROTATE)
+          write_FA = shregB_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
+          wr_en_FB = 1'b1; //Stage fifoB write from bIN  (ROTATE)
+          write_FB = bIN_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
 
-          // ================================================================================================================
-          // (2) - Stage computed pixel result to go inside bRes
+          ed_R1_IN = shregA_out; //Data shregs -> edge detector
+          ed_R2_IN = shregB_out; // -||-
+          ed_R3_IN = bIN_out;    // -||-
+
           bRES_en = 'd1; // enable bRes to get pixels from edge detector module
-          for (int i = 0; i < 4; i++) bRES_in[i*8 +: 8] = ed_P_OUT[i]; // Result buffer gets pixels from edge detector module
-          //for (int i = 0; i < 4; i++) bRES_in[i*8 +: 8] = ed_P_OUT[3-i];  // Result buffer gets pixels from edge detector module
+          bRES_in[7*PW-1 : 6*PW] = ed_P_OUT[3];
+          bRES_in[6*PW-1 : 5*PW] = ed_P_OUT[2];
+          bRES_in[5*PW-1 : 4*PW] = ed_P_OUT[1];
+          bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[0];
 
-          // ================================================================================================================
-          // (3) - Request to read one word of data
-          req = 1'b1;      // request
-          next_rd_addr++;     // increment read address
-          addr = rd_addr;
+          req = 1'b1;         // Stage read from MEM into bIN
+          next_rd_addr++;     // -||-
 
-          // ================================================================================================================
-          // (4) - Rotate fifo data 
-          wr_en_FA = 1'b1;
-          write_FA = shregB_out[DATA_WIDTH - 1 : 0];
-          wr_en_FB = 1'b1;
-          write_FB = bIN_out[DATA_WIDTH - 1 : 0];
-
-          // ================================================================================================================
-          // (5) - Stage FIFO read
-          rd_en_FA  = 1'b1;
-          rd_en_FB  = 1'b1;
-
-          // ================================================================================================================
-          next_state = write_one_word;
+          next_state = write_cycle;
 
         end 
       
-      write_one_word:  
+      write_cycle:  
         begin
-          
+          // TODO: Continute new structure changning from here (compute cycle done)
+
           // ----------------------------------------------------------------------------------------------------------------
           // This state we write a word from result buffer (if enough pixels calculated). 
           // ----------------------------------------------------------------------------------------------------------------
@@ -367,7 +339,6 @@ module acc2 (
             next_compute_clmn_idx = '0;
             next_state = write_last_word_in_row;
             bRES_en = 'd1;
-
           end else begin
             next_compute_clmn_idx = compute_clmn_idx + 'd1;
           end
@@ -396,10 +367,23 @@ module acc2 (
           finish                = 1'b1;
           next_read_row_idx     = 'd0;
           next_read_clmn_idx    = 'd0;
-          next_compute_row_idx  = 'd1;    // TODO: CHANGE TO 0 WITH EDGE CASE
+          next_compute_row_idx  = 'd0;   
           next_compute_clmn_idx = 'd0;
 
           next_state = done;
+
+          if(start) begin
+
+            next_wr_addr = WR_ADDR_START;
+
+            next_state = store_2_lines;
+            req = 1'b1;
+            next_rd_addr = 'd1;
+            next_read_clmn_idx++;
+
+          end
+
+
         end
       default: 
         begin
@@ -418,7 +402,7 @@ module acc2 (
       read_row_idx   <= '0;
       read_clmn_idx  <= '0;
       
-      compute_row_idx <= 'd1;
+      compute_row_idx <= 'd0;
       compute_clmn_idx <= '0;
 
     end else begin

@@ -38,18 +38,18 @@ module edge_detector #(
 
     // Compute Dx(n) - equation (4)
 
-    assign Dx = $signed({2'b0, R1[3]}) - $signed({2'b0, R1[1]}) + 
+    Dx = $signed({2'b0, R1[3]}) - $signed({2'b0, R1[1]}) + 
                 (($signed({2'b0, R2[3]}) - $signed({2'b0, R2[1]})) <<< 1 ) + 
                 $signed({2'b0, R3[3]}) - $signed({2'b0, R3[1]});
 
     // Compute Dy(n) - equation (5)
     
-    assign Dy = $signed({2'b0, R1[1]}) - $signed({2'b0, R3[1]}) + 
+    Dy = $signed({2'b0, R1[1]}) - $signed({2'b0, R3[1]}) + 
                 (($signed({2'b0, R1[2]}) - $signed({2'b0, R3[2]})) <<< 1 )  + 
                 $signed({2'b0, R1[3]}) - $signed({2'b0, R3[3]});
 
     // Compute |D(n)| - equation (6)
-    assign D_abs = (Dx[9] ? -Dx : Dx) + (Dy[9] ? -Dy : Dy);
+    D_abs = (Dx[9] ? -Dx : Dx) + (Dy[9] ? -Dy : Dy);
 
     //Saturate or truncate - NOTE: probably not correct to always just truncate
     //if (D_abs > (2**PW - 1)) 
@@ -58,7 +58,7 @@ module edge_detector #(
     //  return D_abs[PW-1:0];  // Return lower bits
 
     // ANSWER: DO NEITHER - INSTEAD JUST SHIFT THE RESULT DOWN (ALWAYS) - ELSE TOO WHITE
-    return (D_abs[10:3] + D_abs[10:5]);
+    return (D_abs[9:2]); //+ D_abs[10:5]
 
     // Comment everything else and uncomment this to do pass-through test
     //return R2[2];  // Center of 3x3 window
@@ -81,67 +81,125 @@ module edge_detector #(
   // Calculate the rightmost pixel
   // SPECIAL CASES: when at top / bottom row AND when calculating leftmost pixel
   always_comb begin
-
-    pixel [2:0] R1, R2, R3;
+    pixel [3:1] R1, R2, R3;
 
     R1 = R1_pixels[5:3];
     R2 = R2_pixels[5:3];
     R3 = R3_pixels[5:3];
 
+    // Handle top/bottom mirroring
+    if (TOP_special) R1 = R2;  // Mirror middle row to top
+    if (BOT_special) R3 = R2;  // Mirror middle row to bottom
+
+    // Handle right edge mirroring (this is the rightmost pixel)
+    if (RIGHT_special) begin
+      R1[3] = R1[2];  // Mirror center column right
+      R2[3] = R2[2];
+      R3[3] = R3[2];
+    end
+
+    if(TOP_special && RIGHT_special) begin
+      
+      R1[1] = R2[1];
+      R1[2] = R2[2];
+      R1[3] = R2[2];
+      R2[3] = R2[2];
+      R3[3] = R3[2];
+
+    end
+
+    if(BOT_special && RIGHT_special) begin
+
+      R1[3] = R1[2];
+      R2[3] = R2[2];
+      R3[1] = R2[1];
+      R3[2] = R2[2];
+      R3[3] = R2[2];
+    end
+
     pixels_calc[3] = sobel_convolution(R1, R2, R3);
 
   end
 
+
   // Calculate the second most right pixel 
   // SPECIAL CASES: when at top / bottom row
   always_comb begin
-
-    pixel [2:0] R1, R2, R3;
+    pixel [3:1] R1, R2, R3;
 
     R1 = R1_pixels[4:2];
     R2 = R2_pixels[4:2];
     R3 = R3_pixels[4:2];
 
-    if(LEFT_special) begin // needs to be reworked with edge cases
+    // Handle top/bottom mirroring
+    if (TOP_special) R1 = R2;
+    if (BOT_special) R3 = R2;
 
-    end 
-    
     pixels_calc[2] = sobel_convolution(R1, R2, R3);
-
+  
   end
 
 
   // Calculate the second most left pixel
   // SPECIAL CASES: when at top / bottom row
   always_comb begin
-
-    pixel [2:0] R1, R2, R3;
+    pixel [3:1] R1, R2, R3;
 
     R1 = R1_pixels[3:1];
     R2 = R2_pixels[3:1];
     R3 = R3_pixels[3:1];
 
-    if(LEFT_special) begin // needs to be reworked with edge cases
-
-    end 
+    // Handle top/bottom mirroring
+    if (TOP_special) R1 = R2;
+    if (BOT_special) R3 = R2;
 
     pixels_calc[1] = sobel_convolution(R1, R2, R3);
-
   end
 
 
   // Calculate the leftmost pixel
   // SPECIAL CASES: when at top / bottom row AND when calculating rightmost pixel
   always_comb begin
-
-    pixel [2:0] R1, R2, R3;
+    pixel [3:1] R1, R2, R3;
 
     R1 = R1_pixels[2:0];
     R2 = R2_pixels[2:0];
     R3 = R3_pixels[2:0];
 
-    pixels_calc[0] = sobel_convolution(R1, R2, R3);
+    // Handle top/bottom mirroring
+    if (TOP_special) R1 = R2;
+    if (BOT_special) R3 = R2;
 
+    // Handle left edge mirroring (this is the leftmost pixel)
+    if (LEFT_special) begin
+      R1[1] = R1[2];  // Mirror center column left
+      R2[1] = R2[2];
+      R3[1] = R3[2];
+    end
+
+    if(TOP_special && LEFT_special) begin
+      
+      R1[1] = R2[2];
+      R1[2] = R2[2];
+      R1[3] = R2[3];
+
+      R2[1] = R2[2];
+      R3[1] = R3[2];
+
+    end
+
+    if(BOT_special && LEFT_special) begin
+
+      R3[1] = R2[2];
+      R3[2] = R2[2];
+      R3[3] = R2[3];
+
+      R1[1] = R1[2];
+      R2[1] = R2[2];
+
+    end
+
+    pixels_calc[0] = sobel_convolution(R1, R2, R3);
   end
 
 
@@ -153,7 +211,7 @@ module edge_detector #(
 
     pixels_out = pixels_calc;
 
-    if(LEFT_special) begin // needs to be reworked with edge cases
+    if(LEFT_special) begin 
 
       pixels_out[0] = pixels_calc[3];
       pixels_out[3] = pixels_calc[2];
