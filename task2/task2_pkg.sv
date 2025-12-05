@@ -11,7 +11,6 @@ localparam NUM_COLS = 352;
 
 localparam PW = 8;                  // Pixel width (in bits)
 localparam PPT = 4;                 // Pixels Per Transfer
-localparam FIFO_DEPTH = 352;        // 352 bytes pr line
 localparam WORDS_PR_LINE = 88;      // 352/4 == 88 (4 bytes/pixels per word)
 
 //25344 = 352*288/4 = pix_width*pix_height/pix_pr_word
