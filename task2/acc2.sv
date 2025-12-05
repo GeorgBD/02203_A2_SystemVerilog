@@ -177,7 +177,7 @@ module acc2 (
   //------------------------------------------------------------------------------
   
   typedef enum logic [2:0] {
-      idle = 0, store_2_lines = 1, setup_cycle = 2, compute_cycle = 3, write_cycle = 4, done = 5
+      idle = 0, clear_state = 1, store_2_lines = 2, setup_cycle = 3, compute_cycle = 4, write_cycle = 5, done = 6
     } state_t;
 
   state_t state, next_state;
@@ -424,25 +424,14 @@ module acc2 (
         end
       
       done:
-        begin
-          finish                = 1'b1;
-          next_compute_row_idx  = 'd0;   
-          next_compute_clmn_idx = 'd0;
+      begin
+        finish = 1'b1;
+        next_compute_row_idx = 'd0;   
+        next_compute_clmn_idx = 'd0;
+        next_state = done;
 
-          next_state = done;
+      end
 
-          if(start) begin
-
-            next_wr_addr = WR_ADDR_START;
-
-            next_state = store_2_lines;
-            req = 1'b1;
-            next_rd_addr = 'd1;
-
-          end
-
-
-        end
       default: 
         begin
           next_state = idle;

@@ -9,7 +9,7 @@ module testbench;
     logic clk;
     logic reset;
     logic StopSimulation = 0;
-    localparam string load_file_name = "illusion.pgm"; // Path to the input PGM file
+    localparam string load_file_name = "pic1.pgm"; // Path to the input PGM file
 
     // Accelerator and memory signals
     logic [15:0] addr;
