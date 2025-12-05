@@ -1,5 +1,5 @@
 // BRAM inference version
-module fifo #(
+module fifo_bram #(
     parameter PW = 8,
     parameter PPT = 4,
     parameter FIFO_DEPTH = 88
