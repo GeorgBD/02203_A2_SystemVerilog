@@ -7,7 +7,7 @@ import task2_pkg::*;
 
 module edge_detector #(
 
-  parameter M_X_IT = WORDS_PR_LINE-1,   // Maximum number of X iterations per row (words pr. line)
+  parameter M_X_IT = WORDS_PR_LINE-1,     // Maximum number of X iterations per row (words pr. line)
   parameter M_Y_IT = NUM_ROWS-1         // Maximum number of Y iterations (number of rows)
 
 )(
@@ -93,18 +93,18 @@ module edge_detector #(
 
     // Handle right edge mirroring (this is the rightmost pixel)
     if (RIGHT_special) begin
-      R1[3] = R1[2];  // Mirror center column right
-      R2[3] = R2[2];
-      R3[3] = R3[2];
+     R1[3] = R1[2];  // Mirror center column right
+     R2[3] = R2[2];
+     R3[3] = R3[2];
     end
 
     if(TOP_special && RIGHT_special) begin
       
-      R1[1] = R2[1];
-      R1[2] = R2[2];
-      R1[3] = R2[2];
-      R2[3] = R2[2];
-      R3[3] = R3[2];
+     R1[1] = R2[1];
+     R1[2] = R2[2];
+     R1[3] = R2[2];
+     R2[3] = R2[2];
+     R3[3] = R3[2];
 
     end
 
@@ -166,11 +166,11 @@ module edge_detector #(
     R2 = R2_pixels[2:0];
     R3 = R3_pixels[2:0];
 
-    // Handle top/bottom mirroring
+    //Handle top/bottom mirroring
     if (TOP_special) R1 = R2;
     if (BOT_special) R3 = R2;
 
-    // Handle left edge mirroring (this is the leftmost pixel)
+    //Handle left edge mirroring (this is the leftmost pixel)
     if (LEFT_special) begin
       R1[1] = R1[2];  // Mirror center column left
       R2[1] = R2[2];

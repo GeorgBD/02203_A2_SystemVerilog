@@ -43,8 +43,8 @@ module acc2 (
   //------------------------------------------------------------------------------
 
   // Signals for counters
-  logic [$clog2(NUM_ROWS)                 - 1 : 0] read_row_idx, next_read_row_idx, compute_row_idx, next_compute_row_idx;
-  logic [$clog2(WORDS_PR_LINE)            - 1 : 0] read_clmn_idx, next_read_clmn_idx, compute_clmn_idx, next_compute_clmn_idx;
+  logic [$clog2(NUM_ROWS)                 - 1 : 0] compute_row_idx, next_compute_row_idx;
+  logic [$clog2(WORDS_PR_LINE)            - 1 : 0] compute_clmn_idx, next_compute_clmn_idx;
 
   // Module Instantiations (FIFO A, FIFO B) - and signals
     
@@ -54,7 +54,7 @@ module acc2 (
   fifo #(
     .PW(PW),
     .PPT(PPT),
-    .FIFO_DEPTH(FIFO_DEPTH)
+    .FIFO_DEPTH(WORDS_PR_LINE)
   ) FIFO_A (
     .clk(clk),              // IN : 1 bit
     .reset(reset),          // IN : 1 bit, active HIGH
@@ -71,7 +71,7 @@ module acc2 (
   fifo #(
     .PW(PW),
     .PPT(PPT),
-    .FIFO_DEPTH(FIFO_DEPTH)
+    .FIFO_DEPTH(WORDS_PR_LINE)
   ) FIFO_B (
     .clk(clk),
     .reset(reset),
@@ -91,6 +91,15 @@ module acc2 (
   logic [DATA_WIDTH - 1 : 0 ] bRES_out;
   logic [6*PW - 1       : 0 ] shregA_out, shregB_out, bIN_out;
   logic                       shregA_en, shregB_en, bRES_en, bIN_en;
+
+
+  logic R_special, L_special, NOT_special, T_special;
+  
+  assign R_special    = compute_clmn_idx == WORDS_PR_LINE;
+  assign L_special    = compute_clmn_idx == '0;
+  assign NOT_special  = !R_special && !L_special;
+  assign T_special    = compute_row_idx == 'd0;
+
 
   shift_register #(
     .TOTAL_BYTES(6),      // shreg_A
@@ -147,7 +156,7 @@ module acc2 (
   pixel [3:0] ed_P_OUT;
 
   edge_detector #(
-    .M_X_IT(WORDS_PR_LINE-1),
+    .M_X_IT(WORDS_PR_LINE),
     .M_Y_IT(NUM_ROWS-1)
   ) ed (
     // pixel inputs
@@ -204,12 +213,9 @@ module acc2 (
 
     // Shreg expects data as : {P6 , P5 , P4 , P3 , P2 , P1} (rightmost pixel = MSB)
     // FIFOS gives data as : 
-    for(int i = 0; i < 4; i++) begin
-      shregA_in[i*8 +: 8] = read_FA[24-i*8 +: 8];
-      shregB_in[i*8 +: 8] = read_FB[24-i*8 +: 8];
-      bIN_in[i*8 +: 8] = dataR[24-i*8 +: 8];
-    end
-    // TODO: Change this to new structure
+    shregA_in = read_FA;
+    shregB_in = read_FB;
+    bIN_in = dataR;
 
     bRES_in   = '0;
 
@@ -221,8 +227,6 @@ module acc2 (
     // Default for next values
     next_rd_addr = rd_addr;
     next_wr_addr = wr_addr;
-    next_read_row_idx  = read_row_idx;
-    next_read_clmn_idx = read_clmn_idx;
     next_compute_row_idx = compute_row_idx;
     next_compute_clmn_idx = compute_clmn_idx;
     
@@ -262,6 +266,7 @@ module acc2 (
             rd_en_FB  = 1'b1; // -||-
             
             req = 1'b1; //Stage read from MEM into bIn
+            next_rd_addr = rd_addr + 1;
           end
 
         end
@@ -273,100 +278,151 @@ module acc2 (
           shregB_en = 1'b1;   // Get data from FIFOB 
           bIN_en    = 1'b1;   // Put input data into bIn
           
-          
           next_state = compute_cycle;
 
         end
 
       compute_cycle: 
         begin
-         
-          rd_en_FA  = 1'b1; // Stage fifo reads for shregs
-          rd_en_FB  = 1'b1; // Stage fifo reads for shregs
+          if(NOT_special) begin
+            
+            rd_en_FA  = 1'b1; // Stage fifo reads for shregs
+            rd_en_FB  = 1'b1; // Stage fifo reads for shregs
+            
+            wr_en_FA = 1'b1; //Stage fifoA write from shregB  (ROTATE)
+            write_FA = shregB_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
+            wr_en_FB = 1'b1; //Stage fifoB write from bIN  (ROTATE)
+            write_FB = bIN_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
 
-          wr_en_FA = 1'b1; //Stage fifoA write from shregB  (ROTATE)
-          write_FA = shregB_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
-          wr_en_FB = 1'b1; //Stage fifoB write from bIN  (ROTATE)
-          write_FB = bIN_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
+            ed_R1_IN = shregA_out; //Data shregs -> edge detector
+            ed_R2_IN = shregB_out; // -||-
+            ed_R3_IN = bIN_out;    // -||-
+            
+            bRES_en = 'd1; // enable bRes to get pixels from edge detector module
+            bRES_in[7*PW-1 : 6*PW] = ed_P_OUT[3];
+            bRES_in[6*PW-1 : 5*PW] = ed_P_OUT[2];
+            bRES_in[5*PW-1 : 4*PW] = ed_P_OUT[1];
+            bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[0];
 
-          ed_R1_IN = shregA_out; //Data shregs -> edge detector
-          ed_R2_IN = shregB_out; // -||-
-          ed_R3_IN = bIN_out;    // -||-
+            req = 1'b1;         // Stage read from MEM into bIN
+            next_rd_addr++;     // -||-
 
-          bRES_en = 'd1; // enable bRes to get pixels from edge detector module
-          bRES_in[7*PW-1 : 6*PW] = ed_P_OUT[3];
-          bRES_in[6*PW-1 : 5*PW] = ed_P_OUT[2];
-          bRES_in[5*PW-1 : 4*PW] = ed_P_OUT[1];
-          bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[0];
+            next_state = write_cycle;
+          end else if(L_special) begin
+            rd_en_FA  = 1'b1; // Stage fifo reads for shregs
+            rd_en_FB  = 1'b1; // Stage fifo reads for shregs
 
-          req = 1'b1;         // Stage read from MEM into bIN
-          next_rd_addr++;     // -||-
+            if(T_special) begin
+              wr_en_FA = 1'b1; //Stage fifoA write from shregB  (ROTATE)
+              write_FA = shregB_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
+              wr_en_FB = 1'b1; //Stage fifoB write from bIN  (ROTATE)
+              write_FB = bIN_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
+            end
+            
+            ed_R1_IN = shregA_out; //Data shregs -> edge detector
+            ed_R2_IN = shregB_out; // -||-
+            ed_R3_IN = bIN_out;    // -||-
 
-          next_state = write_cycle;
+            bRES_en = 'd1; // enable bRes to get pixels from edge detector module
+            bRES_in[7*PW-1 : 6*PW] = ed_P_OUT[3];
+            bRES_in[6*PW-1 : 5*PW] = ed_P_OUT[2];
+            bRES_in[5*PW-1 : 4*PW] = ed_P_OUT[1];
+            bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[0];
+
+            req = 1'b1;         // Stage read from MEM into bIN
+            next_rd_addr++;     // -||-
+
+            next_state = write_cycle;
+          end else if(R_special) begin
+            
+            //rd_en_FA  = 1'b1; DONT Stage fifo reads for shregs
+            //rd_en_FB  = 1'b1; DONT Stage fifo reads for shregs
+
+            wr_en_FA = 1'b1; //Stage fifoA write from shregB  (ROTATE)
+            write_FA = shregB_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
+            wr_en_FB = 1'b1; //Stage fifoB write from bIN  (ROTATE)
+            write_FB = bIN_out[6*PW-1 : 2*PW]; //Take 4x MSB because LSB unvalid
+
+            ed_R1_IN = shregA_out; //Data shregs -> edge detector
+            ed_R2_IN = shregB_out; // -||-
+            ed_R3_IN = bIN_out;    // -||-
+
+            bRES_en = 'd1; // enable bRes to get pixels from edge detector module
+            bRES_in[7*PW-1 : 6*PW] = ed_P_OUT[3];
+            bRES_in[6*PW-1 : 5*PW] = ed_P_OUT[2];
+            bRES_in[5*PW-1 : 4*PW] = ed_P_OUT[1];
+            bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[0];
+
+            next_state = write_cycle;
+          end else begin
+            //ILLEGAL STATE
+            $error("ERROR");
+          end
 
         end 
       
       write_cycle:  
         begin
-          // TODO: Continute new structure changning from here (compute cycle done)
+          if(NOT_special === 'd1) begin
+            
+            bIN_en = 1'b1;    // Get data from input read into bIn
+            shregA_en = 1'b1; // Get data from FIFO A into shreg
+            shregB_en = 1'b1; // Get data from FIFO B into shreg
 
-          // ----------------------------------------------------------------------------------------------------------------
-          // This state we write a word from result buffer (if enough pixels calculated). 
-          // ----------------------------------------------------------------------------------------------------------------
+            addr = wr_addr;               //Stage write from bRes to mem
+            dataW = bRES_out;             //
+            req     = 1'b1;               //
+            wr_req  = 1'b1;               //
+            next_wr_addr = wr_addr + 'd1; //
 
-          // Ensure that read request from previous stage goes to correct input buffer
-          bIN_en = 1'b1;
-          
-          //Receive FIFO read into shregs. Then the data is ready next cycle in compute state for edge detector.
-          shregA_en = 1'b1;
-          shregB_en = 1'b1;
+            next_compute_clmn_idx++;  //increment column index
 
-          addr = wr_addr;
+            next_state = compute_cycle;
 
-          // logic to qualify if we want to do the write
-          if (compute_clmn_idx > 'd0) begin 
-            dataW = bRES_out;
-            req     = 1'b1; 
-            wr_req  = 1'b1;
-            next_wr_addr = wr_addr + 'd1;
-          end 
+          end else if(L_special === 'd1) begin
+            
+            bIN_en = 1'b1;    // Get data from input read into bIn
+            shregA_en = 1'b1; // Get data from FIFO A into shreg
+            shregB_en = 1'b1; // Get data from FIFO B into shreg
 
-          next_state = compute_pixels;
+            //addr = wr_addr;               //DONT Stage write from bRes to mem
+            //dataW = bRES_out;             //
+            //req     = 1'b1;               //
+            //wr_req  = 1'b1;               //
+            //next_wr_addr = wr_addr + 'd1; //
 
-          // ================================================================================================================
-          // Counter to keep track of X, Y indexes for handling special cases and controlling next_state
-          if (compute_clmn_idx == (WORDS_PR_LINE-1)) begin 
-            next_compute_clmn_idx = '0;
-            next_state = write_last_word_in_row;
-            bRES_en = 'd1;
+            next_compute_clmn_idx++;  //increment column index
+
+            next_state = compute_cycle;
+
+          end else if(R_special === 'd1) begin
+            addr = wr_addr;               //Stage write from bRes to mem
+            dataW = bRES_out;             //
+            req     = 1'b1;               //
+            wr_req  = 1'b1;               //
+            next_wr_addr = wr_addr + 'd1; //
+            
+            
+            next_state = compute_cycle;
+            
+            if(compute_row_idx == (NUM_ROWS-1)) begin
+              next_state = done;
+            end else begin
+              next_compute_row_idx++;
+            end
+
+            next_compute_clmn_idx = 0;
+
           end else begin
-            next_compute_clmn_idx = compute_clmn_idx + 'd1;
+            //ILLEGAL STATE
+            $error("ERROR");
           end
 
         end
-
-      write_last_word_in_row:
-        begin
-          req     = 1'b1; 
-          wr_req  = 1'b1;
-          addr = wr_addr;
-          next_wr_addr = wr_addr + 'd1;
-          dataW = bRES_out;
-          next_state = compute_pixels;
-
-          if(compute_row_idx == (NUM_ROWS-1)) begin
-            next_state = done;
-          end else begin
-            next_compute_row_idx  = compute_row_idx + 'd1;
-          end
-
-        end  
       
       done:
         begin
           finish                = 1'b1;
-          next_read_row_idx     = 'd0;
-          next_read_clmn_idx    = 'd0;
           next_compute_row_idx  = 'd0;   
           next_compute_clmn_idx = 'd0;
 
@@ -379,7 +435,6 @@ module acc2 (
             next_state = store_2_lines;
             req = 1'b1;
             next_rd_addr = 'd1;
-            next_read_clmn_idx++;
 
           end
 
@@ -399,9 +454,6 @@ module acc2 (
       wr_addr   <= NEW_IMG_START_ADDR;
       rd_addr   <= '0;
       
-      read_row_idx   <= '0;
-      read_clmn_idx  <= '0;
-      
       compute_row_idx <= 'd0;
       compute_clmn_idx <= '0;
 
@@ -409,9 +461,6 @@ module acc2 (
       state     <= next_state;
       wr_addr   <= next_wr_addr;
       rd_addr   <= next_rd_addr;
-
-      read_row_idx   <= next_read_row_idx;
-      read_clmn_idx  <= next_read_clmn_idx;
 
       compute_row_idx   <= next_compute_row_idx;
       compute_clmn_idx  <= next_compute_clmn_idx;

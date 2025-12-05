@@ -62,7 +62,7 @@ module shift_register #(
                     Edge detector output res p20  (Bør trigger right-special case her!)
                     bRES content:
                         MSB[S3,S2,S1, | p20,p19,p18,p17 | ]LSB
-                    ->
+                ->
                 
             6    MSB[S4,S3,S2,S1,p20,p19]LSB                         (Colm = 0)
                     Edge detector output res S3,S2,S1  (Bør trigger left-special case her!)
@@ -75,10 +75,11 @@ module shift_register #(
                 -1: 
                     1.  LAST STORE_2_LINES CYCLE: 
                         Stage fifo read for shreg               (For #0.1)
-                    
-                    2.  SETUP CYCLE
                         Stage read from MEM into bIn            (For #0.1)
+
+                    2.  SETUP CYCLE
                         Stage shreg read from fifo              (For #0.1)
+                        Put data from input into bIn            (for #0.1)
 
                 0: 
                     1.  COMPUTE CYCLE (LEFT SPECIAL CASE)
@@ -87,11 +88,12 @@ module shift_register #(
                         Stage fifoB write from bIN              (for #6.1?)  - || - 
 
                         Data shregs -> edge detector
-                        Stage ED output to bRes[7:4](shift)     (for #1.2)
+                        Stage ED output to bRes[7:4](shift)     (for #0.2)
+                        Stage read from MEM into bIn            (For #1.1)
 
                     2.  WRITE CYCLE
                         Stage shreg read from fifo              (For #1.1)
-                        Stage read from MEM into bIn            (For #1.1)
+                        put data from input into bIn            (for #1.1)
 
                         DO NOT WRITE DATA OR SHIFT bRES (LEFT SPECIAL)
                         next_column_idx++                       (for #1.1)
@@ -103,11 +105,12 @@ module shift_register #(
                         Stage fifoB write from bIN              (for #7.1?)  - || - 
 
                         Data shregs -> edge detector (ED)
-                        Stage ED output to bRes[7:4](shift)     (for #2.2)
+                        Stage ED output to bRes[7:4](shift)     (for #1.2)
+                        Stage read from MEM into bIn            (For #2.1)
 
                     2.  WRITE CYCLE
                         Stage shreg read from fifo              (For #2.1)
-                        Stage read from MEM into bIn            (For #2.1)
+                        put data from input into bIn            (for #2.1)
 
                         Stage write from bRes data[3:0]
                         next_column_idx++                       (for #2.1)
@@ -116,19 +119,19 @@ module shift_register #(
 
                 5:
                     1. COMPUTE CYCLE (RIGHT SPECIAL CASE)
-                        (SAME but special case because ED sees column_idx=WORDS_PR_LINE)
+                        (SAME but special case because ED sees column_idx=WORDS_PR_LINE
+                            and DONT stage fifo read here)
 
                         Special case in ED -> only p20 calculated (using right mirroring)
                                            -> still output 4 pixels (S1,S2,S3 at this point garbage)
                                            -> garbage shifted out at (#7.1)
 
                     2. WRITE CYCLE (RIGHT SPECIAL CASE)
-                        
-                        Stage read from MEM into bIn            (For #6.1)
-                        
+                                            
                         Stage write from bRes data[3:0]  
+                        DONT put data from input into bIn       (for #6.1)
 
-                        Stage shreg read from fifo              (For #6.1)
+                        DONT Stage shreg read from fifo         (For #6.1)
                         
                         next_row_idx++;                         (For #6.1)
                         next_column_idx = 0;                    (For #6.1)
