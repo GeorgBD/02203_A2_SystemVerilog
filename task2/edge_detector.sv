@@ -51,7 +51,6 @@ module edge_detector #(
     // Compute |D(n)| - equation (6)
     D_abs = (Dx[9] ? -Dx : Dx) + (Dy[9] ? -Dy : Dy);
 
-
     //Saturate or truncate - NOTE: probably not correct to always just truncate
     //if (D_abs > (2**PW - 1)) 
     //  return {PW{1'b1}};  // Saturate to max value
@@ -60,8 +59,6 @@ module edge_detector #(
 
     // ANSWER: DO NEITHER - INSTEAD JUST SHIFT THE RESULT DOWN (ALWAYS) - ELSE TOO WHITE
     return (D_abs[10:3]) + D_abs[10:5]; //
-
-  
 
     // Comment everything else and uncomment this to do pass-through test
     //return R2[2];  // Center of 3x3 window
