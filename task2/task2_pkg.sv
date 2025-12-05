@@ -14,12 +14,12 @@ localparam PPT = 4;                 // Pixels Per Transfer
 localparam WORDS_PR_LINE = 88;      // 352/4 == 88 (4 bytes/pixels per word)
 
 //25344 = 352*288/4 = pix_width*pix_height/pix_pr_word
-localparam WR_ADDR_START = 25344; //+ WORDS_PR_LINE;   // TODO: remove WORDS_PR_LINE when added support for calculating row 0 and row 287
+localparam WR_ADDR_START = 25344; //+ WORDS_PR_LINE;
 localparam WR_ADDR_END = 50687;
 
-localparam ADDR_WIDTH_FIFO = $clog2(FIFO_DEPTH);
+localparam ADDR_WIDTH_FIFO = $clog2(WORDS_PR_LINE);
 localparam DATA_WIDTH = PPT * PW;
 
-typedef logic [PW-1:0] pixel;
+typedef logic [PW-1:0] pixel;         // comment
 
 endpackage

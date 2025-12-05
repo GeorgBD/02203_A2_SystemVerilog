@@ -262,6 +262,9 @@ module acc2 (
             
             next_state  = setup_cycle; 
             
+            wr_en_FB    = 1'b1; //Receive final mem stage of addr 87  
+            wr_en_FA    = 1'b1;
+
             rd_en_FA  = 1'b1; //Stage FIFO read for shreg
             rd_en_FB  = 1'b1; // -||-
             
@@ -299,10 +302,10 @@ module acc2 (
             ed_R3_IN = bIN_out;    // -||-
             
             bRES_en = 'd1; // enable bRes to get pixels from edge detector module
-            bRES_in[7*PW-1 : 6*PW] = ed_P_OUT[3];
-            bRES_in[6*PW-1 : 5*PW] = ed_P_OUT[2];
-            bRES_in[5*PW-1 : 4*PW] = ed_P_OUT[1];
-            bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[0];
+            bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[3];
+            bRES_in[3*PW-1 : 2*PW] = ed_P_OUT[2];
+            bRES_in[2*PW-1 : 1*PW] = ed_P_OUT[1];
+            bRES_in[1*PW-1 : 0*PW] = ed_P_OUT[0];
 
             req = 1'b1;         // Stage read from MEM into bIN
             next_rd_addr++;     // -||-
@@ -324,10 +327,10 @@ module acc2 (
             ed_R3_IN = bIN_out;    // -||-
 
             bRES_en = 'd1; // enable bRes to get pixels from edge detector module
-            bRES_in[7*PW-1 : 6*PW] = ed_P_OUT[3];
-            bRES_in[6*PW-1 : 5*PW] = ed_P_OUT[2];
-            bRES_in[5*PW-1 : 4*PW] = ed_P_OUT[1];
-            bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[0];
+            bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[3];
+            bRES_in[3*PW-1 : 2*PW] = ed_P_OUT[2];
+            bRES_in[2*PW-1 : 1*PW] = ed_P_OUT[1];
+            bRES_in[1*PW-1 : 0*PW] = ed_P_OUT[0];
 
             req = 1'b1;         // Stage read from MEM into bIN
             next_rd_addr++;     // -||-
@@ -348,10 +351,10 @@ module acc2 (
             ed_R3_IN = bIN_out;    // -||-
 
             bRES_en = 'd1; // enable bRes to get pixels from edge detector module
-            bRES_in[7*PW-1 : 6*PW] = ed_P_OUT[3];
-            bRES_in[6*PW-1 : 5*PW] = ed_P_OUT[2];
-            bRES_in[5*PW-1 : 4*PW] = ed_P_OUT[1];
-            bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[0];
+            bRES_in[4*PW-1 : 3*PW] = ed_P_OUT[3];
+            bRES_in[3*PW-1 : 2*PW] = ed_P_OUT[2];
+            bRES_in[2*PW-1 : 1*PW] = ed_P_OUT[1];
+            bRES_in[1*PW-1 : 0*PW] = ed_P_OUT[0];
 
             next_state = write_cycle;
           end else begin

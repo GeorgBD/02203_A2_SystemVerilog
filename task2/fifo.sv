@@ -53,12 +53,12 @@ module fifo #(
 				rd_valid <= 0;
 			end
 			// count
-			if (wr_en && rd_en) fifo_count = fifo_count;
+			if (wr_en && rd_en) fifo_count <= fifo_count;
 			else begin
 				case ({wr_en && !full, rd_en && !empty})
-					2'b10: fifo_count = fifo_count + 1; // write only
-					2'b01: fifo_count = fifo_count - 1; // read only
-					default: fifo_count = fifo_count;   // both or neither
+					2'b10: fifo_count <= fifo_count + 1; // write only
+					2'b01: fifo_count <= fifo_count - 1; // read only
+					default: fifo_count <= fifo_count;   // both or neither
 				endcase
 			end
 		end
